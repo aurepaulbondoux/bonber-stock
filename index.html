@@ -157,13 +157,22 @@ tr:hover td{background:rgba(30,35,54,.5)}
   <svg width="52" height="60" viewBox="0 0 38 44" fill="none"><ellipse cx="19" cy="10" rx="9" ry="9" fill="#c9a84c"/><ellipse cx="14.5" cy="13" rx="5.5" ry="5" fill="#b8962e"/><polygon points="10,18 28,18 19,40" fill="#1e2d3d"/><line x1="10.5" y1="21" x2="27.5" y2="21" stroke="#162330" stroke-width="1.2"/></svg>
   <div class="l-brand">Bon<span>Bër</span></div>
   <div class="l-sub">Cocina de Helados · Stock v5</div>
-  <div class="l-card">
+  <div class="l-card" id="loginCard">
     <div style="font-family:var(--fh);font-size:12px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--mut);margin-bottom:16px;text-align:center">Iniciar Sesión</div>
     <div class="l-err" id="loginErr"></div>
     <div class="fld"><label>Usuario</label><input type="text" id="loginUser" placeholder="usuario" autocomplete="username"></div>
     <div class="fld"><label>Contraseña</label><input type="password" id="loginPass" placeholder="••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:10px 0"><input type="checkbox" id="rememberMe" style="width:18px;height:18px;accent-color:var(--acc)"><span style="font-family:var(--fh);font-size:11px;letter-spacing:1px;color:var(--mut)">Recordar sesión</span></label>
     <button class="btn by" onclick="doLogin()">Ingresar</button>
+  </div>
+  <div class="l-card" id="setupCard" style="display:none">
+    <div style="font-family:var(--fh);font-size:12px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--mut);margin-bottom:12px;text-align:center">Primer uso · Crear administrador</div>
+    <div class="inf" style="margin-bottom:12px">No hay ninguna cuenta en este dispositivo. Creá la cuenta de <strong>administrador</strong>. Guardá bien la contraseña: no se puede recuperar.</div>
+    <div class="l-err" id="setupErr"></div>
+    <div class="fld"><label>Usuario</label><input type="text" id="setupUser" placeholder="tu usuario" autocomplete="username"></div>
+    <div class="fld"><label>Contraseña (mín. 6 caracteres)</label><input type="password" id="setupPass" placeholder="••••••" autocomplete="new-password"></div>
+    <div class="fld"><label>Confirmar contraseña</label><input type="password" id="setupPass2" placeholder="••••••" autocomplete="new-password" onkeydown="if(event.key==='Enter')doSetup()"></div>
+    <button class="btn by" onclick="doSetup()">Crear y entrar</button>
   </div>
 </div>
 <div id="appShell" style="display:none">
@@ -843,6 +852,17 @@ tr:hover td{background:rgba(30,35,54,.5)}
   </div>
 </div>
 </div>
+<!-- MODAL: CAMBIO DE CONTRASEÑA OBLIGATORIO -->
+<div id="passForceModal" style="display:none;position:fixed;inset:0;z-index:800;background:rgba(0,0,0,.8);align-items:center;justify-content:center;padding:20px">
+  <div style="background:var(--sur);border:1px solid var(--bor);border-radius:8px;width:100%;max-width:340px;padding:20px">
+    <div style="font-family:var(--fh);font-size:12px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--ora);margin-bottom:10px">Cambio de contraseña obligatorio</div>
+    <div class="inf" style="margin-bottom:12px">Tu contraseña es temporal o es la que venía por defecto. Elegí una nueva para continuar.</div>
+    <div class="l-err" id="fcErr"></div>
+    <div class="fld"><label>Nueva contraseña (mín. 6)</label><input type="password" id="fcNueva" autocomplete="new-password"></div>
+    <div class="fld"><label>Confirmar</label><input type="password" id="fcConf" autocomplete="new-password" onkeydown="if(event.key==='Enter')forceChangeDo()"></div>
+    <div class="br2"><button class="btn by" onclick="forceChangeDo()">Guardar y entrar</button><button class="btn bgh" onclick="forceChangeCancel()">Cancelar</button></div>
+  </div>
+</div>
 <div id="toast"></div>
 
 <!-- MODAL ETIQUETA DE LOTE -->
@@ -955,18 +975,24 @@ function dlBlob(content,filename,mime){
 }
 
 // Cambio de contraseña — lógica compartida
-function cambiarPass(idActual,idNueva,idConfirm,idErr){
+async function cambiarPass(idActual,idNueva,idConfirm,idErr){
   var actual=document.getElementById(idActual).value;
   var nueva=document.getElementById(idNueva).value;
   var conf=document.getElementById(idConfirm).value;
   var errEl=document.getElementById(idErr);
+  function fail(m){errEl.textContent=m;errEl.style.display='block';return false;}
   errEl.style.display='none';
-  if(!actual||!nueva||!conf){errEl.textContent='Completá todos los campos.';errEl.style.display='block';return false;}
-  if(CU.password!==actual){errEl.textContent='Contraseña actual incorrecta.';errEl.style.display='block';return false;}
-  if(nueva.length<4){errEl.textContent='Mínimo 4 caracteres.';errEl.style.display='block';return false;}
-  if(nueva!==conf){errEl.textContent='Las contraseñas no coinciden.';errEl.style.display='block';return false;}
-  S.users.find(function(x){return x.id===CU.id;}).password=nueva;
-  CU.password=nueva;save();
+  if(!actual||!nueva||!conf)return fail('Completá todos los campos.');
+  var me=S.users.find(function(x){return x.id===CU.id;});
+  var ok=false;
+  try{ok=await verifyPassword(me,actual);}catch(e){return fail('Este navegador no permite validar contraseñas de forma segura.');}
+  if(!ok)return fail('Contraseña actual incorrecta.');
+  if(nueva.length<PW_MIN)return fail('Mínimo '+PW_MIN+' caracteres.');
+  if(nueva===PW_DEFAULT_PUBLICA)return fail('Elegí una contraseña distinta a la que venía por defecto.');
+  if(nueva!==conf)return fail('Las contraseñas no coinciden.');
+  me.ph=await hashPassword(nueva);
+  delete me.password;delete me.forzarCambio;
+  save();
   [idActual,idNueva,idConfirm].forEach(function(id){document.getElementById(id).value='';});
   toast('Contraseña actualizada ✓','var(--acc)');
   return true;
@@ -1072,7 +1098,7 @@ function buildState(){
       insumos:MP_INS.map(function(i){return Object.assign({precio:0,prov:''},i);}),
       movs:[],proveedores:[],precios:[]
     },
-    users:[{id:'u1',username:'aure',password:'bonber2026',role:'admin',activo:true}],
+    users:[],  // el administrador se crea en el primer uso (pantalla de setup)
     config:{waNum:''}
   };
 }
@@ -1124,14 +1150,18 @@ async function loadState(){
     }
   }catch(e){S=buildState();}
 
+  // Pasar contraseñas viejas en texto plano a hash (y marcar la credencial pública por defecto)
+  try{await migratePasswords();}catch(e){}
+
   try{
     var sess=await storageGet('bonber_sess');
     if(sess){
       var sd=JSON.parse(sess);
       var u=S.users.find(function(x){return x.id===sd.uid&&x.activo;});
-      if(u){startSession(u);return;}
+      if(u&&!u.forzarCambio){startSession(u);return;}
     }
   }catch(e){}
+  showAuthScreen();
 }
 
 async function save(){
@@ -1139,17 +1169,133 @@ async function save(){
 }
 
 // ─── AUTH ────────────────────────────────────────────────────────────
-function doLogin(){
+// Contraseñas: PBKDF2-SHA256 con sal aleatoria por usuario (crypto.subtle).
+// Nunca se guarda la contraseña en claro. Formato: pbkdf2$iteraciones$sal$hash (base64).
+var PW_ITER=150000, PW_MIN=6, PW_DEFAULT_PUBLICA='bonber2026';
+
+function _b64(buf){var b=new Uint8Array(buf),s='';for(var i=0;i<b.length;i++)s+=String.fromCharCode(b[i]);return btoa(s);}
+function _unb64(t){var b=atob(t),a=new Uint8Array(b.length);for(var i=0;i<b.length;i++)a[i]=b.charCodeAt(i);return a;}
+function _eqStr(a,b){if(a.length!==b.length)return false;var r=0;for(var i=0;i<a.length;i++)r|=a.charCodeAt(i)^b.charCodeAt(i);return r===0;}
+async function _pbkdf2(pass,salt,iter){
+  if(!(window.crypto&&window.crypto.subtle))throw new Error('nocrypto');
+  var key=await window.crypto.subtle.importKey('raw',new TextEncoder().encode(pass),'PBKDF2',false,['deriveBits']);
+  return window.crypto.subtle.deriveBits({name:'PBKDF2',salt:salt,iterations:iter,hash:'SHA-256'},key,256);
+}
+async function hashPassword(pass){
+  var salt=window.crypto.getRandomValues(new Uint8Array(16));
+  var bits=await _pbkdf2(pass,salt,PW_ITER);
+  return 'pbkdf2$'+PW_ITER+'$'+_b64(salt)+'$'+_b64(bits);
+}
+async function verifyPassword(user,pass){
+  if(!user)return false;
+  if(user.ph){
+    var p=user.ph.split('$');
+    if(p.length!==4||p[0]!=='pbkdf2')return false;
+    var bits=await _pbkdf2(pass,_unb64(p[2]),parseInt(p[1],10));
+    return _eqStr(_b64(bits),p[3]);
+  }
+  // Solo si la migración no pudo correr (navegador sin crypto.subtle): evita quedar sin acceso
+  if(user.password!==undefined)return user.password===pass;
+  return false;
+}
+// Convierte contraseñas en claro (versiones anteriores o backups viejos) a hash
+async function migratePasswords(){
+  var changed=false;
+  for(var i=0;i<S.users.length;i++){
+    var u=S.users[i];
+    if(u.password===undefined)continue;
+    if(u.password===PW_DEFAULT_PUBLICA)u.forzarCambio=true; // era la credencial pública del código
+    if(!u.ph&&u.password)u.ph=await hashPassword(String(u.password));
+    delete u.password;changed=true;
+  }
+  if(changed)await save();
+}
+
+// Muestra el login, o el alta del primer administrador si no existe ninguno
+function showAuthScreen(){
+  var hayAdmin=S.users.some(function(u){return u.role==='admin'&&u.activo;});
+  document.getElementById('loginCard').style.display=hayAdmin?'block':'none';
+  document.getElementById('setupCard').style.display=hayAdmin?'none':'block';
+  document.getElementById('loginScreen').style.display='flex';
+}
+function finishLogin(user,remember){
+  if(remember){storageSet('bonber_sess',JSON.stringify({uid:user.id}));}
+  else{storageDel('bonber_sess');}
+  startSession(user);
+}
+
+var _loginFails=0,_loginLockUntil=0;
+async function doLogin(){
+  var errEl=document.getElementById('loginErr');
+  function fail(m){errEl.textContent=m;errEl.style.display='block';}
+  var wait=_loginLockUntil-Date.now();
+  if(wait>0)return fail('Demasiados intentos. Esperá '+Math.ceil(wait/1000)+' s.');
   var u=document.getElementById('loginUser').value.trim().toLowerCase();
   var p=document.getElementById('loginPass').value;
-  var found=S.users.find(function(x){return x.username.toLowerCase()===u&&x.password===p;});
-  var errEl=document.getElementById('loginErr');
-  if(!found){errEl.textContent='Usuario o contraseña incorrectos';errEl.style.display='block';return;}
-  if(!found.activo){errEl.textContent='Usuario deshabilitado.';errEl.style.display='block';return;}
+  var cand=S.users.find(function(x){return x.username.toLowerCase()===u;});
+  var ok=false;
+  try{ok=await verifyPassword(cand,p);}
+  catch(e){return fail('Este navegador no permite validar contraseñas de forma segura. Abrí la app desde su dirección https.');}
+  if(!ok){
+    _loginFails++;
+    if(_loginFails>=5){_loginLockUntil=Date.now()+30000;_loginFails=0;}
+    return fail('Usuario o contraseña incorrectos');
+  }
+  if(!cand.activo)return fail('Usuario deshabilitado.');
+  _loginFails=0;errEl.style.display='none';
+  var rem=document.getElementById('rememberMe').checked;
+  if(cand.forzarCambio){forceChangeStart(cand,rem);return;}
+  finishLogin(cand,rem);
+}
+
+// Primer uso: alta del administrador
+async function doSetup(){
+  var errEl=document.getElementById('setupErr');
+  function fail(m){errEl.textContent=m;errEl.style.display='block';}
+  var name=document.getElementById('setupUser').value.trim();
+  var p1=document.getElementById('setupPass').value;
+  var p2=document.getElementById('setupPass2').value;
+  if(!name)return fail('Ingresá un usuario.');
+  if(p1.length<PW_MIN)return fail('La contraseña necesita al menos '+PW_MIN+' caracteres.');
+  if(p1===PW_DEFAULT_PUBLICA)return fail('Elegí otra contraseña.');
+  if(p1!==p2)return fail('Las contraseñas no coinciden.');
+  var ph;
+  try{ph=await hashPassword(p1);}
+  catch(e){return fail('Este navegador no permite crear contraseñas seguras. Abrí la app desde su dirección https.');}
+  var nu={id:uid(),username:name,ph:ph,role:'admin',activo:true};
+  S.users.push(nu);
+  await save();
   errEl.style.display='none';
-  if(document.getElementById('rememberMe').checked){storageSet('bonber_sess',JSON.stringify({uid:found.id}));}
-  else{storageDel('bonber_sess');}
-  startSession(found);
+  document.getElementById('setupPass').value='';document.getElementById('setupPass2').value='';
+  finishLogin(nu,false);
+}
+
+// Cambio obligatorio (contraseña por defecto o restablecida por un admin)
+var _fcUser=null,_fcRemember=false;
+function forceChangeStart(user,remember){
+  _fcUser=user;_fcRemember=remember;
+  document.getElementById('fcNueva').value='';document.getElementById('fcConf').value='';
+  document.getElementById('fcErr').style.display='none';
+  document.getElementById('passForceModal').style.display='flex';
+}
+function forceChangeCancel(){
+  _fcUser=null;document.getElementById('passForceModal').style.display='none';
+  document.getElementById('loginPass').value='';
+}
+async function forceChangeDo(){
+  var errEl=document.getElementById('fcErr');
+  function fail(m){errEl.textContent=m;errEl.style.display='block';}
+  var n=document.getElementById('fcNueva').value,c=document.getElementById('fcConf').value;
+  if(n.length<PW_MIN)return fail('Mínimo '+PW_MIN+' caracteres.');
+  if(n===PW_DEFAULT_PUBLICA)return fail('Elegí una contraseña distinta a la que venía por defecto.');
+  if(n!==c)return fail('Las contraseñas no coinciden.');
+  var u=S.users.find(function(x){return _fcUser&&x.id===_fcUser.id;});
+  if(!u)return fail('Sesión inválida, volvé a ingresar.');
+  u.ph=await hashPassword(n);delete u.password;delete u.forzarCambio;
+  await save();
+  document.getElementById('passForceModal').style.display='none';
+  var rem=_fcRemember;_fcUser=null;
+  finishLogin(u,rem);
 }
 // ─── HELPERS DE ROL ─────────────────────────────────────────────────
 function isAdmin(){return CU&&CU.role==='admin';}
@@ -1187,8 +1333,8 @@ function doLogout(){
   storageDel('bonber_sess');
   document.getElementById('loginUser').value='';
   document.getElementById('loginPass').value='';
-  document.getElementById('loginScreen').style.display='flex';
   document.getElementById('appShell').style.display='none';
+  showAuthScreen();
 }
 
 // ─── NAVEGACIÓN ──────────────────────────────────────────────────────
@@ -4051,13 +4197,15 @@ function precioRender(){
 // ─── ADMIN ───────────────────────────────────────────────────────────
 function aCambiarMiPass(){cambiarPass('aMiActual','aMiNueva','aMiConfirm','aMiErr');}
 function pCambiarPass(){cambiarPass('pActual','pNueva','pConfirm','pErr');}
-function aCrearUser(){
+async function aCrearUser(){
   var username=document.getElementById('aNewUser').value.trim();
   var password=document.getElementById('aNewPass').value;
   var role=document.getElementById('aNewRol').value;
   if(!username||!password){toast('Completá usuario y contraseña','var(--red)');return;}
+  if(password.length<PW_MIN){toast('La contraseña necesita al menos '+PW_MIN+' caracteres','var(--red)');return;}
   if(S.users.find(function(u){return u.username.toLowerCase()===username.toLowerCase();})){toast('Ya existe','var(--red)');return;}
-  S.users.push({id:uid(),username:username,password:password,role:role,activo:true});
+  var ph;try{ph=await hashPassword(password);}catch(e){toast('Este navegador no permite crear contraseñas seguras','var(--red)');return;}
+  S.users.push({id:uid(),username:username,ph:ph,role:role,activo:true,forzarCambio:true});
   save();aRender();
   document.getElementById('aNewUser').value='';
   document.getElementById('aNewPass').value='';
@@ -4068,11 +4216,16 @@ function aToggle(id){
   var u=S.users.find(function(x){return x.id===id;});if(!u)return;
   u.activo=!u.activo;save();aRender();toast(u.username+' '+(u.activo?'habilitado':'deshabilitado'));
 }
-function aResetPass(id){
+async function aResetPass(id){
   var u=S.users.find(function(x){return x.id===id;});if(!u)return;
-  var np=prompt('Nueva contraseña para "'+u.username+'":');
+  var np=prompt('Nueva contraseña temporal para "'+u.username+'" (mín. '+PW_MIN+' caracteres):');
   if(!np||!np.trim())return;
-  u.password=np.trim();save();toast('Contraseña de "'+u.username+'" actualizada');
+  np=np.trim();
+  if(np.length<PW_MIN){toast('Mínimo '+PW_MIN+' caracteres','var(--red)');return;}
+  try{u.ph=await hashPassword(np);}catch(e){toast('Este navegador no permite crear contraseñas seguras','var(--red)');return;}
+  delete u.password;
+  if(u.id!==CU.id)u.forzarCambio=true; // la persona la cambia en su próximo ingreso
+  save();toast('Contraseña de "'+u.username+'" actualizada'+(u.id!==CU.id?' · deberá cambiarla al ingresar':''));
 }
 function aElimUser(id){
   if(CU.id===id){toast('No podés eliminarte','var(--red)');return;}
@@ -4106,7 +4259,9 @@ function importarDatos(inp){
     try{
       var datos=JSON.parse(e.target.result);
       if(!validateState(datos))throw new Error('Estructura inválida');
-      S=datos;await save();toast('Importado ✓','var(--grn)');
+      S=datos;
+      try{await migratePasswords();}catch(e2){}
+      await save();toast('Importado ✓','var(--grn)');
       setTimeout(function(){location.reload();},800);
     }catch(err){toast('Archivo inválido: '+err.message,'var(--red)');}
     inp.value='';
@@ -4115,7 +4270,9 @@ function importarDatos(inp){
 }
 async function resetDatos(){
   if(!confirm('⚠ Borrará todos los datos. ¿Seguro?'))return;
-  S=buildState();await save();toast('Reseteado ✓','var(--acc)');
+  var keepUsers=S.users,keepCfg=S.config;   // conserva cuentas y configuración
+  S=buildState();S.users=keepUsers;if(keepCfg)S.config=keepCfg;
+  await save();toast('Reseteado ✓','var(--acc)');
   setTimeout(function(){location.reload();},800);
 }
 
