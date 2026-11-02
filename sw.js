@@ -1,16 +1,17 @@
 // BonBër Stock v5 — Service Worker
 // Cache strategy: Cache First para assets estáticos, Network First para API calls
 
-const CACHE_NAME = 'bonber-v5-cache-v1';
-const OFFLINE_URL = 'index.html';
+const CACHE_NAME = 'bonber-v5-cache-v2';
+const OFFLINE_URL = './index.html';
 
 // Archivos a cachear en la instalación
+// Rutas RELATIVAS: la app vive en https://usuario.github.io/repo/ (no en la raíz del dominio)
 const PRECACHE_URLS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/icon-192.png',
-  '/icon-512.png',
+  './',
+  './index.html',
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png',
   // Google Fonts — se cachean en runtime
 ];
 
