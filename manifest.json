@@ -2,13 +2,13 @@
   "name": "BonBër Stock",
   "short_name": "BonBër",
   "description": "BonBër · Cocina de Helados · Sistema de stock y producción",
-  "start_url": "/index.html",
+  "start_url": "./index.html",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#0f1117",
   "theme_color": "#0f1117",
   "lang": "es",
-  "scope": "/",
+  "scope": "./",
   "icons": [
     {
       "src": "icon-192.png",
